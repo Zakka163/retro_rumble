@@ -61,3 +61,4 @@ python3 daytona_monitor.py --simulate
         Monitoring FFB Drive Register: 0x0057285B
    ```
 4. Tabrakkan mobil di game Daytona USA, dan trigger akan langsung aktif seketika!
+
