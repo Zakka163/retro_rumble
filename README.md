@@ -7,3 +7,4 @@ Integrasi Force Feedback / Rumble dan Deteksi Event untuk game arcade (Daytona U
 - Console debugging otomatis (`AllocConsole`) saat emulator memuat plugin.
 - Konfigurasi siap pakai untuk Model 2 Emulator (`FFBPlugin.ini`).
 - Dukungan Force Feedback dan controller rumble.
+
