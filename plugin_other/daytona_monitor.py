@@ -7,6 +7,8 @@ Dilengkapi mode diagnostik visual agar Anda tahu persis apa yang sedang terjadi.
 """
 
 import sys
+import os
+import re
 import time
 
 IS_WINDOWS = sys.platform.startswith("win")
@@ -48,6 +50,95 @@ def get_base_address(h_process):
         pass
 
     return 0x00400000  # Default base address Sega Model 2
+
+
+def get_process_directory(h_process):
+    """Mendapatkan folder tempat EMULATOR.EXE berada untuk diagnostik konfigurasi."""
+    if not IS_WINDOWS:
+        return None
+    try:
+        buf = ctypes.create_unicode_buffer(1024)
+        size = wintypes.DWORD(1024)
+        if hasattr(kernel32, "QueryFullProcessImageNameW"):
+            if kernel32.QueryFullProcessImageNameW(h_process, 0, buf, ctypes.byref(size)):
+                return os.path.dirname(buf.value)
+        if psapi and hasattr(psapi, "GetModuleFileNameExW"):
+            if psapi.GetModuleFileNameExW(h_process, None, buf, 1024):
+                return os.path.dirname(buf.value)
+    except Exception:
+        pass
+    return None
+
+
+def run_diagnostic_check(proc_dir):
+    """Memeriksa file EMULATOR.INI dan FFBPlugin.ini secara otomatis untuk mendeteksi salah konfigurasi."""
+    print("\n" + "=" * 65)
+    print("   DIAGNOSTIK KESEHATAN KONFIGURASI EMULATOR & PLUGIN")
+    print("=" * 65)
+    if not proc_dir or not os.path.isdir(proc_dir):
+        print("[-] Folder proses emulator tidak dapat dipindai otomatis.")
+        print("    Pastikan Anda mengecek file 'EMULATOR.INI' manual.")
+        return
+
+    print(f"Folder Emulator: {proc_dir}")
+
+    # 1. Cek EMULATOR.INI (Konfigurasi emulator Sega Model 2)
+    emu_ini = os.path.join(proc_dir, "EMULATOR.INI")
+    if not os.path.exists(emu_ini):
+        emu_ini = os.path.join(proc_dir, "emulator.ini")
+
+    if os.path.exists(emu_ini):
+        try:
+            with open(emu_ini, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            m = re.search(r"^\s*EnableFF\s*=\s*(\d+)", content, re.MULTILINE | re.IGNORECASE)
+            if m:
+                val = m.group(1)
+                if val == "1":
+                    print("[OK] EMULATOR.INI -> EnableFF=1 (Force Feedback diaktifkan oleh emulator)")
+                else:
+                    print(f"\n[!! PERHATIAN KRUSIAL - PENYEBAB DATA TIDAK KELUAR !!]")
+                    print(f"[X] EMULATOR.INI -> EnableFF={val}")
+                    print(f"    Emulator Sega Model 2 saat ini MEMATIKAN chip FFB arcade!")
+                    print(f"    Akibatnya register FFB akan beku bernilai 0x00 selamanya.")
+                    print(f"    SOLUSI: Buka '{emu_ini}', cari [Input], lalu ubah:")
+                    print(f"            EnableFF=1")
+                    print(f"    Kemudian tutup dan buka kembali emulatornya!\n")
+            else:
+                print(f"[?] EMULATOR.INI tidak memuat 'EnableFF'. Pastikan ada 'EnableFF=1' di bawah [Input].")
+        except Exception as e:
+            print(f"[!] Gagal membaca EMULATOR.INI: {e}")
+    else:
+        print("[-] File EMULATOR.INI tidak ditemukan di folder emulator.")
+
+    # 2. Cek FFBPlugin.ini (Jika menggunakan FFBArcadePlugin)
+    ffb_ini = os.path.join(proc_dir, "FFBPlugin.ini")
+    if not os.path.exists(ffb_ini):
+        ffb_ini = os.path.join(proc_dir, "ffbplugin.ini")
+
+    if os.path.exists(ffb_ini):
+        try:
+            with open(ffb_ini, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            m = re.search(r"^\s*GameId\s*=\s*(-?\d+)", content, re.MULTILINE | re.IGNORECASE)
+            if m:
+                gid = m.group(1)
+                if gid == "25":
+                    print("[OK] FFBPlugin.ini -> GameId=25 (Mode Daytona Model 2 aktif)")
+                else:
+                    print(f"\n[!! PERHATIAN UNTUK FFBARCADEPLUGIN !!]")
+                    print(f"[X] FFBPlugin.ini -> GameId={gid} (SEHARUSNYA 25!)")
+                    print(f"    Inilah mengapa FFBlog.txt hanya berisi '0 0' & 'dll thread detach'!")
+                    print(f"    SOLUSI: Buka '{ffb_ini}', ubah baris GameId menjadi:")
+                    print(f"            GameId = 25\n")
+            else:
+                print(f"[?] FFBPlugin.ini tidak memuat 'GameId'. Tambahkan 'GameId = 25'.")
+        except Exception as e:
+            print(f"[!] Gagal membaca FFBPlugin.ini: {e}")
+    else:
+        print("[i] FFBPlugin.ini tidak ditemukan (Abaikan jika hanya memakai script Python ini).")
+
+    print("=" * 65 + "\n")
 
 
 def find_emulator_candidates():
@@ -172,6 +263,10 @@ def main():
         print(f"\n[ERROR] Gagal membuka proses emulator (Error Code: {err})")
         print("SOLUSI: Buka Command Prompt dengan 'Run as Administrator', lalu jalankan lagi script ini.")
         return
+
+    # Jalankan diagnostik otomatis file konfigurasi (EMULATOR.INI & FFBPlugin.ini)
+    proc_dir = get_process_directory(h_process)
+    run_diagnostic_check(proc_dir)
 
     # Tentukan alamat memori Drive Board Model 2
     base_addr = get_base_address(h_process)
