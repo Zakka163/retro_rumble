@@ -1,0 +1,13 @@
+.DS_Store
+.vs/
+packages/
+node_modules/
+**/node_modules/
+Release.Win32/
+Release.x64/
+Debug.Win32/
+Debug.x64/
+*.7z
+*.zip
+*.log
+log.txt
